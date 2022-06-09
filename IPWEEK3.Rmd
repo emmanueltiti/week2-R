@@ -1,0 +1,404 @@
+---
+title: "IP WEEk2 CLUSTERING"
+author: "Emmanuel Titi"
+date: '2022-06-07'
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+**PROBLEM QUESTION**
+
+[*Kira Plastinina* (Links to an external site.)](https://kiraplastinina.ru/) *is a Russian brand that is sold through a defunct chain of retail stores in Russia, Ukraine, Kazakhstan, Belarus, China, Philippines, and Armenia. The brand's Sales and Marketing team would like to understand their customer's behavior from data that they have collected over the past year. More specifically, they would like to learn the characteristics of customer groups.*
+
+1.  Perform clustering stating insights drawn from your analysis and visualizations.
+
+2.  Upon implementation, provide comparisons between the approaches learned this week i.e. K-Means clustering vs Hierarchical clustering highlighting the strengths and limitations of each approach in the context of your analysis. 
+
+Your findings should help inform the team in formulating the marketing and sales strategies of the brand. 
+
+**Data source**
+
+Data was provided by client and the description is as follows
+
+The dataset for this project can be found here [[http://bit.ly/EcommerceCustomersDataset (Links to an external site.)](http://bit.ly/EcommerceCustomersDataset)].  
+
+-   The dataset consists of 10 numerical and 8 categorical attributes. The 'Revenue' attribute can be used as the class label.
+
+-   "Administrative", "Administrative Duration", "Informational", "Informational Duration", "Product Related" and "Product Related Duration" represents the number of different types of pages visited by the visitor in that session and total time spent in each of these page categories. The values of these features are derived from the URL information of the pages visited by the user and updated in real-time when a user takes an action, e.g. moving from one page to another. 
+
+-   The "Bounce Rate", "Exit Rate" and "Page Value" features represent the metrics measured by "Google Analytics" for each page in the e-commerce site. 
+
+-   The value of the "Bounce Rate" feature for a web page refers to the percentage of visitors who enter the site from that page and then leave ("bounce") without triggering any other requests to the analytics server during that session. 
+
+-   The value of the "Exit Rate" feature for a specific web page is calculated as for all pageviews to the page, the percentage that was the last in the session.
+
+-   The "Page Value" feature represents the average value for a web page that a user visited before completing an e-commerce transaction. 
+
+-   The "Special Day" feature indicates the closeness of the site visiting time to a specific special day (e.g. Mother's Day, Valentine's Day) in which the sessions are more likely to be finalized with the transaction. The value of this attribute is determined by considering the dynamics of e-commerce such as the duration between the order date and delivery date. For example, for Valentina's day, this value takes a nonzero value between February 2 and February 12, zero before and after this date unless it is close to another special day, and its maximum value of 1 on February 8. 
+
+-   The dataset also includes the operating system, browser, region, traffic type, visitor type as returning or new visitor, a Boolean value indicating whether the date of the visit is weekend, and month of the year.
+
+    *Checking the data*
+
+```{r}
+#importing needed dependencies for analysis and cleaning 
+library(tidyr)
+library(tidyverse)
+#pre veiwing
+df=read.csv("http://bit.ly/EcommerceCustomersDataset")
+head(df ,6)
+tail(df ,6)
+```
+
+```{r}
+dim(df)
+```
+
+\*\*Descriptive analysis\*\*
+
+```{r}
+# descriptive table
+#install.packages("dlookr")
+library(dlookr)
+#install.packages("flextable")
+library(flextable)
+
+dlookr::describe(df)%>%flextable()
+```
+
+```{r}
+df%>%
+  diagnose_numeric()%>%
+  flextable()
+```
+
+```{r}
+#checking for data types of variables
+sapply(df,class)
+```
+
+The variables are correctly assigned
+
+\*\*DATA CLEANING\*\*
+
+\*Missing Data\*
+
+Null values make our data inconsistent and may make our analysis hard,for that it is necessary to properly deal with them to improve the quality of the data we have.
+
+```{r}
+#checking for the count of missing values
+sapply(df, function(x) sum(is.na(x)))
+sum(is.na(df))
+```
+
+Notice that we have 14 rows with missing values across the board, 14 is very minimal less than 1% if our data and would hence not cause any problems when dropped
+
+```{r}
+#Dropping null values 
+df1 <- na.omit(df)
+```
+
+*Checking duplicates*
+
+```{r}
+#Checking for duplicates*
+
+sum(duplicated(df1))
+df_a<-unique(df1)
+head(df_a,5)
+```
+
+Then data had duplicates so a new data frame df_1 of unique values was created which omitted the duplicate rows.
+
+*outliers*
+
+```{r}
+df2<-df_a%>%
+        select(,1:6)
+par(mfrow = c(1, ncol(df2)))
+invisible(lapply(1:ncol(df2), function(i) boxplot(df2[, i]))) 
+
+df3<-df_a%>%
+        select(,7:10)
+par(mfrow = c(1, ncol(df3)))
+invisible(lapply(1:ncol(df3), function(i) boxplot(df3[, i])))  
+
+df4<-df_a%>%
+        select(,12:14)
+par(mfrow = c(1, ncol(df4)))
+invisible(lapply(1:ncol(df4), function(i) boxplot(df4[, i]))) 
+```
+
+The box plots above help us to detect outliers in our data. From the above plots we do notice that most of our variables contain outliers ,some few ,others have alot. Dropping our outliers may result in high inaccuracy in our data set we will hence keep our data as is.
+
+```{r}
+#table with numerals only
+data_nums1<-select_if(df_a,is.numeric)
+
+```
+
+\*\*UNIVARIATE ANALYSIS\*\*
+
+\*Skewness and Kurtosis\*
+
+```{r}
+#install.packages("DataExplorer")
+library(DataExplorer)
+plot_histogram(df_a)
+plot_density(df_a)
+```
+
+From the plots it is safe to say that almost all of our variable are skewed to the left meaning that most values occur before the mean point hence the shape of the curves
+
+\*\*BIVARIATE ANALYSIS\*\*
+
+We will now try to compare different numeric variables to see their relationships
+
+```{r}
+
+library("corrplot")
+corrplot(cor(data_nums1), type = 'upper', method = 'number', tl.cex = 0.9)
+```
+
+From the above correlation matricess : "Administrative" and "Administrative Duration", "Informational"and "Informational Duration", "Product Related" and "Product Related Duration" seem to have a positive correlation with .
+
+```{r}
+#lets make pair plots to see if there is some interesting visuals we can find.
+
+pairs(data_nums1[,5:8])
+
+
+
+```
+
+Lets try and focus on the bounce rates and exit rates pair plot .we can make scatter plot out of it and see
+
+```{r}
+#scatter plot of bounce rates and exit rates
+ggplot(data_nums1, aes(x = ExitRates, y = BounceRates)) +
+  geom_point() +
+  geom_smooth(method = 'lm', se = FALSE) +
+  theme_bw()
+
+```
+
+We can see there is a positive correlation between the two values an increase in bounce rates (visitors who enter the site from that page and then leave ) results in increase in exit rates.
+
+Let us group our data by region and see the overal relation ships in it
+
+```{r}
+dfG<-df_a%>% group_by(Region)%>%
+  summarise(exit=mean(ExitRates),admin_dur=mean(Administrative_Duration),mean(ProductRelated_Duration),mean( PageValues),bounce=mean(BounceRates))
+
+```
+
+Lets now plot bar graphs to see how region compares to the selected columns
+
+```{r}
+ggplot(dfG,aes(x=as.character(Region),y=exit,fill=''))+
+  geom_bar(stat = "identity")
+```
+
+Region 6 had the highest percentage count of last sessions recorded followed by 6,4 and 3
+
+```{r}
+ggplot(dfG,aes(x=as.character(Region),y=admin_dur,fill=''))+
+  geom_bar(stat = "identity")
+```
+
+Region 8 had the highest records of admin on-site duration followed by 5 and 2.
+
+```{r}
+ggplot(dfG,aes(x=as.character(Region),y=bounce,fill=''))+
+  geom_bar(stat = "identity")
+```
+
+Region 6 had the highest amounts of individuals who cliched on the site and left immediately.this also coincides with the exit rate which was also high in region six from the first bar plot.
+
+Lets group by visitor type and see the relationship between our variables.
+
+```{r}
+dfv<-df_a%>% group_by(VisitorType)%>%
+  summarise(exit=mean(ExitRates),admin_dur=mean(Administrative_Duration),related_prod=mean(ProductRelated_Duration),mean( PageValues),bounce=mean(BounceRates),Revenue)
+```
+
+Returning visitors make the majority portion of our site visitors .
+
+```{r}
+ggplot(dfv,aes(x=VisitorType,y=bounce,fill=''))+
+  geom_bar(stat = "identity")
+```
+
+New visitors had the lowest bounce rate meaning most of them did not leave the site immediately meaning most were on the site purposefully.
+
+```{r}
+ggplot(dfv,aes(x=VisitorType,y=related_prod,fill=''))+
+  geom_bar(stat = "identity")
+```
+
+Most of the returning customers spent a lot of time on the product related to their initial site ,followed by new visitors and lastly 'other'
+
+Lets also see which region has most of the new visitors
+
+```{r}
+dfvisitors<-df_a%>%group_by(Region)%>%
+  summarise(VisitorType,Revenue)
+head(dfvisitors)
+```
+
+lets visualize the results
+
+```{r}
+ggplot(dfvisitors,aes(x=as.character(Region),fill=VisitorType))+
+  geom_bar()
+```
+
+Region 1 has highest number of returning visitors and highest number of new visitors,region 9 seems to be the only region with 'other' visitor
+
+```{r}
+ggplot(dfvisitors,aes(x=Revenue,fill=VisitorType))+
+  geom_bar()
+```
+
+Returning visitors seem to contribute to most of the revenue earned,followed by the new visitors and a small percentage of 'other'
+
+```{r}
+ggplot(dfvisitors,aes(x=as.character(Region),fill=Revenue))+
+  geom_bar()
+```
+
+Region 1,3,2 respectively are our biggest revenue earners.
+
+```{r}
+ggplot(dfvisitors,aes(x=VisitorType,fill=''))+
+  geom_bar()
+```
+
+Returning visitors make the majority portion of our site visitors .
+
+\*\*\*CLUSTERING\*\*\*
+
+We can now start building our models,we can hence encode all of our categorical variables and normalize the data . first we encode our non-numeric values
+
+*Label encoding*
+
+```{r}
+df_a$Revenue=factor(df_a$Revenue, level=c("TRUE","FALSE"),
+                    labels=c("1","0"))
+
+df_a$Weekend=factor(df_a$Weekend, level=c("TRUE","FALSE"),
+                    labels=c("1","0"))
+
+df_a$VisitorType =factor(df_a$VisitorType,level=c("Returning_visitor","New_visitor","Other"), labels=c(0,1,2))                    
+
+df_a$Month=factor(df_a$Month,level=c("Mar","May","June","Jul","Aug","Sep","Oct","Nov","Dec","Feb"),labels=c(1,2,3,4,5,6,7,8,9,0))                    
+
+                   
+```
+
+\*Normalizing our data\*
+
+We normalize or standardize our data using our mean or standard deviation . Ideally this sort of bring every value with in our data set below
+
+```{r}
+df_a1<-select(df_a,-VisitorType)
+#we turn all variablea to numeric
+df_a1[] <- lapply(df_a1, function(x) as.numeric(as.character(x)))
+#scaling
+dfnorm<-as.data.frame(scale(df_a1))
+head(dfnorm)
+
+```
+
+We can compute k-means in R with the k means function.Lets first start with 5 clusters and an nstart of 25 ,the best configuration of the 25 will be printed
+
+\* Base model\*
+
+```{r}
+dfnorm_K5 <- kmeans(dfnorm, centers = 5, nstart = 25)
+#print(dfnorm_k5)
+```
+
+We can visualize the 5 clusters
+
+```{r}
+
+#library(cluster)
+library(factoextra)
+```
+
+```{r}
+fviz_cluster(dfnorm_K5, data = dfnorm)
+
+```
+
+So from our visual we can conclude that 5 is not our best cluster number. Lets try and find an ideal cluster number to use.
+
+\*Elbow method\*
+
+```{r}
+# Determining Optimal clusters (k) Using Elbow method
+wssplot <- function(dfnorm, nc = 15, set.seed = 1234){
+  wss <- (nrow(data) - 1)*sum(apply(dfnorm, 2, var))
+  for(i in 2:nc) {
+    set.seed(1234)
+    wss[i] <- sum(kmeans(x = dfnorm, centers = i, nstart = 25)$withinss)
+  }
+  plot(1:nc, wss, type = 'b', xlab = 'Number of Clusters', ylab = 'Within Group Sum of Square',
+       main = 'Elbow Method Plot to Find Optimal Number of Clusters', frame.plot = T,
+       col = 'blue', lwd = 1.5)
+}
+
+wssplot(dfnorm)
+```
+
+From the elbow plot and the gap statistic we can use 2 as our number of clusters,
+
+```{r}
+#2 cluster 
+
+dfnorm_k2 <- kmeans(dfnorm, centers = 2, nstart = 20)
+#print(dfnorm_k2)
+```
+
+```{r}
+#2 cluster visual
+fviz_cluster(dfnorm_k2, data = dfnorm)
+```
+
+Lets now get some final descriptive information from the 2 final clusters
+
+```{r}
+dfnorm %>% 
+  mutate(Cluster = dfnorm_k2$cluster) %>%
+  group_by(Cluster) %>%
+  summarize_all('median')
+
+
+```
+
+**Findings**
+
+1.  Regions 1, 3, 2 respectively are our highest income earners,
+
+2.  Returning customers are the majority in our revenue earners.
+
+3.  Regions 1 and 3 respectively have the highest number of returning and new visitors .
+
+4.  The 'Other ' visitors category make a lot of the the bounces on the web data followed by returning visitors and finally new visitors.
+
+5.  Returning visitors make largest portion of visitors on the site followed by new visitors.
+
+**Conclusion**
+
+From the analysis,we can conclude that a very small percentage of site visitors make purchases ,our sites are highly popular in regions 1(mostly) and 2. This is highly unbalanced and suggest that thorough actions in advertising and logistics need to be made.
+
+**Recommendations**
+
+1.  Regions with in which our site is unpopular or least visited need more advertisements other than online adverts, say airtime on TVs and radio, billboards and many more.
+
+2.  Targeted advertising on the site should be increased especially to our new and 'other' visitor.
